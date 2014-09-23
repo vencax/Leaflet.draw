@@ -857,6 +857,7 @@ L.Draw.SimpleShape = L.Draw.Feature.extend({
 	}
 });
 
+
 L.Draw.Rectangle = L.Draw.SimpleShape.extend({
 	statics: {
 		TYPE: 'rectangle'
@@ -1097,7 +1098,7 @@ L.Edit.Poly = L.Handler.extend({
 
 	initialize: function (poly, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){ 
+		if (L.Browser.touch){
 			this.options.icon = this.options.touchIcon;
 		}
 
@@ -1109,6 +1110,10 @@ L.Edit.Poly = L.Handler.extend({
 		if (this._poly._map) {
 
 			this._map = this._poly._map; // Set map
+			//Terrible hack to un-nest nested polygons. See https://github.com/Leaflet/Leaflet/issues/2618
+			if (!this._poly._flat(this._poly._latlngs)) {
+				this._poly._latlngs = this._poly._latlngs[0];
+			}
 
 			if (!this._markerGroup) {
 				this._initMarkers();
@@ -1263,7 +1268,7 @@ L.Edit.Poly = L.Handler.extend({
 		var layerPoint = this._map.mouseEventToLayerPoint(e.originalEvent.touches[0]),
 			latlng = this._map.layerPointToLatLng(layerPoint),
 			marker = e.target;
-				
+
 		L.extend(marker._origLatLng, latlng);
 
 		if (marker._middleLeft) {
@@ -1362,7 +1367,7 @@ L.Edit.Poly = L.Handler.extend({
 	}
 });
 
-L.Polyline.addInitHook(function () {
+var initHook = function () {
 
 	// Check to see if handler has already been initialized. This is to support versions of Leaflet that still have L.Handler.PolyEdit
 	if (this.editing) {
@@ -1388,7 +1393,10 @@ L.Polyline.addInitHook(function () {
 			this.editing.removeHooks();
 		}
 	});
-});
+};
+
+L.Polyline.addInitHook(initHook);
+L.Polygon.addInitHook(initHook);
 
 
 L.Edit = L.Edit || {};
@@ -1927,7 +1935,7 @@ L.GeometryUtil = L.extend(L.GeometryUtil || {}, {
 	geodesicArea: function (latLngs) {
 		var pointsCount = latLngs.length,
 			area = 0.0,
-			d2r = L.LatLng.DEG_TO_RAD,
+			d2r = Math.PI / 180,
 			p1, p2;
 
 		if (pointsCount > 2) {
