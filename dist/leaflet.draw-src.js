@@ -229,7 +229,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 
 	initialize: function (map, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){ 
+		if (L.Browser.touch){
 			this.options.icon = this.options.touchIcon;
 		}
 
@@ -256,7 +256,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 			this._map.addLayer(this._markerGroup);
 
 			this._poly = new L.Polyline([], this.options.shapeOptions);
-			
+
 			this._tooltip.updateContent(this._getTooltipText());
 
 			// Make a transparent marker that will used to catch click events. These click
@@ -319,7 +319,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 	},
 
 	deleteLastVertex: function () {
-		if (this._markers.length <= 1) {
+		if (this._markers.length <= 0) {
 			return;
 		}
 
@@ -440,7 +440,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 			this._onMouseUp(e);
 		}
 	},
-	
+
 	_vertexChanged: function (latlng, added) {
 		this._updateFinishHandler();
 
