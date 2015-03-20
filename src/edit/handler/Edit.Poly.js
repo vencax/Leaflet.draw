@@ -18,7 +18,7 @@ L.Edit.Poly = L.Handler.extend({
 
 	initialize: function (poly, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){
+		if (L.Browser.touch) {
 			this.options.icon = this.options.touchIcon;
 		}
 
@@ -27,6 +27,14 @@ L.Edit.Poly = L.Handler.extend({
 	},
 
 	addHooks: function () {
+		var poly = this._poly;
+
+		if (!(poly instanceof L.Polygon)) {
+			poly.options.editing.fill = false;
+		}
+
+		poly.setStyle(poly.options.editing);
+
 		if (this._poly._map) {
 
 			this._map = this._poly._map; // Set map
@@ -43,8 +51,12 @@ L.Edit.Poly = L.Handler.extend({
 	},
 
 	removeHooks: function () {
-		if (this._poly._map) {
-			this._poly._map.removeLayer(this._markerGroup);
+		var poly = this._poly;
+
+		poly.setStyle(poly.options.original);
+
+		if (poly._map) {
+			poly._map.removeLayer(this._markerGroup);
 			delete this._markerGroup;
 			delete this._markers;
 		}
@@ -183,7 +195,7 @@ L.Edit.Poly = L.Handler.extend({
 		this._fireEdit();
 	},
 
-	_onTouchMove: function (e){
+	_onTouchMove: function (e) {
 
 		var layerPoint = this._map.mouseEventToLayerPoint(e.originalEvent.touches[0]),
 			latlng = this._map.layerPointToLatLng(layerPoint),

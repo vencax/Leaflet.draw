@@ -41,7 +41,8 @@ L.drawLocal = {
 			circle: {
 				tooltip: {
 					start: 'Click and drag to draw circle.'
-				}
+				},
+				radius: 'Radius'
 			},
 			marker: {
 				tooltip: {
@@ -229,7 +230,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 
 	initialize: function (map, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){
+		if (L.Browser.touch) {
 			this.options.icon = this.options.touchIcon;
 		}
 
@@ -358,7 +359,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 		this._vertexChanged(latlng, true);
 	},
 
-	completeShape: function(){
+	completeShape: function () {
 		if (this._markers.length <= 1) {
 			return;
 		}
@@ -435,7 +436,7 @@ L.Draw.Polyline = L.Draw.Feature.extend({
 
 	_onTouch: function (e) {
 		// #TODO: use touchstart and touchend vs using click(touch start & end).
-		if (L.Browser.touch){ // #TODO: get rid of this once leaflet fixes their click/touch.
+		if (L.Browser.touch) { // #TODO: get rid of this once leaflet fixes their click/touch.
 			this._onMouseDown(e);
 			this._onMouseUp(e);
 		}
@@ -825,6 +826,12 @@ L.Draw.SimpleShape = L.Draw.Feature.extend({
 		this._isDrawing = false;
 	},
 
+	_getTooltipText: function () {
+		return {
+			text: this._endLabelText
+		};
+	},
+
 	_onMouseDown: function (e) {
 		this._isDrawing = true;
 		this._startLatLng = e.latlng;
@@ -840,7 +847,7 @@ L.Draw.SimpleShape = L.Draw.Feature.extend({
 
 		this._tooltip.updatePosition(latlng);
 		if (this._isDrawing) {
-			this._tooltip.updateContent({ text: this._endLabelText });
+			this._tooltip.updateContent(this._getTooltipText());
 			this._drawShape(latlng);
 		}
 	},
@@ -873,7 +880,8 @@ L.Draw.Rectangle = L.Draw.SimpleShape.extend({
 			fillColor: null, //same as color by default
 			fillOpacity: 0.2,
 			clickable: true
-		}
+		},
+		metric: true // Whether to use the metric meaurement system or imperial
 	},
 
 	initialize: function (map, options) {
@@ -897,6 +905,23 @@ L.Draw.Rectangle = L.Draw.SimpleShape.extend({
 	_fireCreatedEvent: function () {
 		var rectangle = new L.Rectangle(this._shape.getBounds(), this.options.shapeOptions);
 		L.Draw.SimpleShape.prototype._fireCreatedEvent.call(this, rectangle);
+	},
+
+	_getTooltipText: function () {
+		var tooltipText = L.Draw.SimpleShape.prototype._getTooltipText.call(this),
+			shape = this._shape,
+			latLngs, area, subtext;
+
+		if (shape) {
+			latLngs = this._shape.getLatLngs();
+			area = L.GeometryUtil.geodesicArea(latLngs);
+			subtext = L.GeometryUtil.readableArea(area, this.options.metric);
+		}
+
+		return {
+			text: tooltipText.text,
+			subtext: subtext
+		};
 	}
 });
 
@@ -959,7 +984,7 @@ L.Draw.Circle = L.Draw.SimpleShape.extend({
 
 			this._tooltip.updateContent({
 				text: this._endLabelText,
-				subtext: showRadius ? 'Radius: ' + L.GeometryUtil.readableDistance(radius, useMetric) : ''
+				subtext: showRadius ? L.drawLocal.draw.handlers.circle.radius + ': ' + L.GeometryUtil.readableDistance(radius, useMetric) : ''
 			});
 		}
 	}
@@ -1080,6 +1105,83 @@ L.Draw.Marker = L.Draw.Feature.extend({
 
 L.Edit = L.Edit || {};
 
+L.Edit.Marker = L.Handler.extend({
+	initialize: function (marker, options) {
+		this._marker = marker;
+		L.setOptions(this, options);
+	},
+
+	addHooks: function () {
+		var marker = this._marker;
+
+		marker.dragging.enable();
+		marker.on('dragend', this._onDragEnd, marker);
+		this._toggleMarkerHighlight();
+	},
+
+	removeHooks: function () {
+		var marker = this._marker;
+
+		marker.dragging.disable();
+		marker.off('dragend', this._onDragEnd, marker);
+		this._toggleMarkerHighlight();
+	},
+
+	_onDragEnd: function (e) {
+		var layer = e.target;
+		layer.edited = true;
+	},
+
+	_toggleMarkerHighlight: function () {
+
+		// Don't do anything if this layer is a marker but doesn't have an icon. Markers
+		// should usually have icons. If using Leaflet.draw with Leafler.markercluster there
+		// is a chance that a marker doesn't.
+		if (!this._icon) {
+			return;
+		}
+		
+		// This is quite naughty, but I don't see another way of doing it. (short of setting a new icon)
+		var icon = this._icon;
+
+		icon.style.display = 'none';
+
+		if (L.DomUtil.hasClass(icon, 'leaflet-edit-marker-selected')) {
+			L.DomUtil.removeClass(icon, 'leaflet-edit-marker-selected');
+			// Offset as the border will make the icon move.
+			this._offsetMarker(icon, -4);
+
+		} else {
+			L.DomUtil.addClass(icon, 'leaflet-edit-marker-selected');
+			// Offset as the border will make the icon move.
+			this._offsetMarker(icon, 4);
+		}
+
+		icon.style.display = '';
+	},
+
+	_offsetMarker: function (icon, offset) {
+		var iconMarginTop = parseInt(icon.style.marginTop, 10) - offset,
+			iconMarginLeft = parseInt(icon.style.marginLeft, 10) - offset;
+
+		icon.style.marginTop = iconMarginTop + 'px';
+		icon.style.marginLeft = iconMarginLeft + 'px';
+	}
+});
+
+L.Marker.addInitHook(function () {
+	if (L.Edit.Marker) {
+		this.editing = new L.Edit.Marker(this);
+
+		if (this.options.editable) {
+			this.editing.enable();
+		}
+	}
+});
+
+
+L.Edit = L.Edit || {};
+
 /*
  * L.Edit.Poly is an editing handler for polylines and polygons.
  */
@@ -1098,7 +1200,7 @@ L.Edit.Poly = L.Handler.extend({
 
 	initialize: function (poly, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){
+		if (L.Browser.touch) {
 			this.options.icon = this.options.touchIcon;
 		}
 
@@ -1107,6 +1209,14 @@ L.Edit.Poly = L.Handler.extend({
 	},
 
 	addHooks: function () {
+		var poly = this._poly;
+
+		if (!(poly instanceof L.Polygon)) {
+			poly.options.editing.fill = false;
+		}
+
+		poly.setStyle(poly.options.editing);
+
 		if (this._poly._map) {
 
 			this._map = this._poly._map; // Set map
@@ -1123,8 +1233,12 @@ L.Edit.Poly = L.Handler.extend({
 	},
 
 	removeHooks: function () {
-		if (this._poly._map) {
-			this._poly._map.removeLayer(this._markerGroup);
+		var poly = this._poly;
+
+		poly.setStyle(poly.options.original);
+
+		if (poly._map) {
+			poly._map.removeLayer(this._markerGroup);
 			delete this._markerGroup;
 			delete this._markers;
 		}
@@ -1263,7 +1377,7 @@ L.Edit.Poly = L.Handler.extend({
 		this._fireEdit();
 	},
 
-	_onTouchMove: function (e){
+	_onTouchMove: function (e) {
 
 		var layerPoint = this._map.mouseEventToLayerPoint(e.originalEvent.touches[0]),
 			latlng = this._map.layerPointToLatLng(layerPoint),
@@ -1423,7 +1537,7 @@ L.Edit.SimpleShape = L.Handler.extend({
 
 	initialize: function (shape, options) {
 		// if touch, switch to touch icon
-		if (L.Browser.touch){ 
+		if (L.Browser.touch) {
 			this.options.moveIcon = this.options.touchMoveIcon;
 			this.options.resizeIcon = this.options.touchResizeIcon;
 		}
@@ -1433,19 +1547,27 @@ L.Edit.SimpleShape = L.Handler.extend({
 	},
 
 	addHooks: function () {
+		var shape = this._shape;
 		if (this._shape._map) {
-
 			this._map = this._shape._map;
+			shape.setStyle(shape.options.editing);
 
-			if (!this._markerGroup) {
-				this._initMarkers();
+			if (shape._map) {
+				this._map = shape._map;
+				if (!this._markerGroup) {
+					this._initMarkers();
+				}
+				this._map.addLayer(this._markerGroup);
 			}
-			this._map.addLayer(this._markerGroup);
 		}
 	},
 
 	removeHooks: function () {
-		if (this._shape._map) {
+		var shape = this._shape;
+
+		shape.setStyle(shape.options.original);
+
+		if (shape._map) {
 			this._unbindMarker(this._moveMarker);
 
 			for (var i = 0, l = this._resizeMarkers.length; i < l; i++) {
@@ -1555,7 +1677,7 @@ L.Edit.SimpleShape = L.Handler.extend({
 	_onTouchStart: function (e) {
 		L.Edit.SimpleShape.prototype._onMarkerDragStart.call(this, e);
 
-		if (typeof(this._getCorners) === "function") { 
+		if (typeof(this._getCorners) === 'function') {
 			// Save a reference to the opposite point
 			var corners = this._getCorners(),
 				marker = e.target,
@@ -1791,7 +1913,7 @@ L.Circle.addInitHook(function () {
 });
 
 L.Map.mergeOptions({
-  touchExtend: true
+	touchExtend: true
 });
 
 L.Map.TouchExtend = L.Handler.extend({
@@ -1961,7 +2083,7 @@ L.GeometryUtil = L.extend(L.GeometryUtil || {}, {
 				areaStr = area.toFixed(2) + ' m&sup2;';
 			}
 		} else {
-			area *= 0.836127; // Square yards in 1 meter
+			area /= 0.836127; // Square yards in 1 meter
 
 			if (area >= 3097600) { //3097600 square yards in 1 square mile
 				areaStr = (area / 3097600).toFixed(2) + ' mi&sup2;';
@@ -2811,8 +2933,7 @@ L.EditToolbar.Edit = L.Handler.extend({
 	initialize: function (map, options) {
 		L.Handler.prototype.initialize.call(this, map);
 
-		// Set options to the default unless already set
-		this._selectedPathOptions = options.selectedPathOptions;
+		L.setOptions(this, options);
 
 		// Store the selectable layer group for ease of access
 		this._featureGroup = options.featureGroup;
@@ -2943,58 +3064,21 @@ L.EditToolbar.Edit = L.Handler.extend({
 			} else if (layer instanceof L.Marker) { // Marker
 				layer.setLatLng(this._uneditedLayerProps[id].latlng);
 			}
+
+			layer.fire('revert-edited', { layer: layer });
 		}
-	},
-
-	_toggleMarkerHighlight: function (marker) {
-		if (!marker._icon) {
-			return;
-		}
-		// This is quite naughty, but I don't see another way of doing it. (short of setting a new icon)
-		var icon = marker._icon;
-
-		icon.style.display = 'none';
-
-		if (L.DomUtil.hasClass(icon, 'leaflet-edit-marker-selected')) {
-			L.DomUtil.removeClass(icon, 'leaflet-edit-marker-selected');
-			// Offset as the border will make the icon move.
-			this._offsetMarker(icon, -4);
-
-		} else {
-			L.DomUtil.addClass(icon, 'leaflet-edit-marker-selected');
-			// Offset as the border will make the icon move.
-			this._offsetMarker(icon, 4);
-		}
-
-		icon.style.display = '';
-	},
-
-	_offsetMarker: function (icon, offset) {
-		var iconMarginTop = parseInt(icon.style.marginTop, 10) - offset,
-			iconMarginLeft = parseInt(icon.style.marginLeft, 10) - offset;
-
-		icon.style.marginTop = iconMarginTop + 'px';
-		icon.style.marginLeft = iconMarginLeft + 'px';
 	},
 
 	_enableLayerEdit: function (e) {
 		var layer = e.layer || e.target || e,
-			isMarker = layer instanceof L.Marker,
 			pathOptions;
-
-		// Don't do anything if this layer is a marker but doesn't have an icon. Markers
-		// should usually have icons. If using Leaflet.draw with Leafler.markercluster there
-		// is a chance that a marker doesn't.
-		if (isMarker && !layer._icon) {
-			return;
-		}
 
 		// Back up this layer (if haven't before)
 		this._backupLayer(layer);
 
-		// Update layer style so appears editable
-		if (this._selectedPathOptions) {
-			pathOptions = L.Util.extend({}, this._selectedPathOptions);
+		// Set different style for editing mode
+		if (this.options.selectedPathOptions) {
+			pathOptions = L.Util.extend({}, this.options.selectedPathOptions);
 
 			// Use the existing color of the layer
 			if (pathOptions.maintainColor) {
@@ -3002,27 +3086,17 @@ L.EditToolbar.Edit = L.Handler.extend({
 				pathOptions.fillColor = layer.options.fillColor;
 			}
 
-			if (isMarker) {
-				this._toggleMarkerHighlight(layer);
-			} else {
-				layer.options.previousOptions = L.Util.extend({ dashArray: null }, layer.options);
-
-				// Make sure that Polylines are not filled
-				if (!(layer instanceof L.Circle) && !(layer instanceof L.Polygon) && !(layer instanceof L.Rectangle)) {
-					pathOptions.fill = false;
-				}
-
-				layer.setStyle(pathOptions);
-			}
+			layer.options.original = L.extend({}, layer.options);
+			layer.options.editing = pathOptions;
 		}
 
-		if (isMarker) {
+		if (this.isMarker) {
 			layer.dragging.enable();
 			layer
 				.on('dragend', this._onMarkerDragEnd)
 				// #TODO: remove when leaflet finally fixes their draggable so it's touch friendly again.
- 				.on('touchmove', this._onTouchMove, this)
- 				.on('touchend', this._onMarkerDragEnd, this);
+				.on('touchmove', this._onTouchMove, this)
+				.on('touchend', this._onMarkerDragEnd, this);
 		} else {
 			layer.editing.enable();
 		}
@@ -3030,8 +3104,12 @@ L.EditToolbar.Edit = L.Handler.extend({
 
 	_disableLayerEdit: function (e) {
 		var layer = e.layer || e.target || e;
-		layer.edited = false;
 
+		layer.edited = false;
+		layer.editing.disable();
+
+		delete layer.options.editing;
+		delete layer.options.original;
 		// Reset layer styles to that of before select
 		if (this._selectedPathOptions) {
 			if (layer instanceof L.Marker) {
@@ -3049,22 +3127,17 @@ L.EditToolbar.Edit = L.Handler.extend({
 			layer
 				.off('dragend', this._onMarkerDragEnd, this)
 				.off('touchmove', this._onTouchMove, this)
- 				.off('touchend', this._onMarkerDragEnd, this);
+				.off('touchend', this._onMarkerDragEnd, this);
 		} else {
 			layer.editing.disable();
 		}
-	},
-
-	_onMarkerDragEnd: function (e) {
-		var layer = e.target;
-		layer.edited = true;
 	},
 
 	_onMouseMove: function (e) {
 		this._tooltip.updatePosition(e.latlng);
 	},
 
-	_onTouchMove: function (e){
+	_onTouchMove: function (e) {
 		var touchEvent = e.originalEvent.changedTouches[0],
 			layerPoint = this._map.mouseEventToLayerPoint(touchEvent),
 			latlng = this._map.layerPointToLatLng(layerPoint);
@@ -3136,7 +3209,7 @@ L.EditToolbar.Delete = L.Handler.extend({
 			map.getContainer().focus();
 
 			this._deletableLayers.eachLayer(this._enableLayerDelete, this);
-			this._deletedLayers = new L.layerGroup();
+			this._deletedLayers = new L.LayerGroup();
 
 			this._tooltip = new L.Tooltip(this._map);
 			this._tooltip.updateContent({ text: L.drawLocal.edit.handlers.remove.tooltip.text });
@@ -3161,6 +3234,7 @@ L.EditToolbar.Delete = L.Handler.extend({
 		// Iterate of the deleted layers and add them back into the featureGroup
 		this._deletedLayers.eachLayer(function (layer) {
 			this._deletableLayers.addLayer(layer);
+			layer.fire('revert-deleted', { layer: layer });
 		}, this);
 	},
 
@@ -3189,6 +3263,8 @@ L.EditToolbar.Delete = L.Handler.extend({
 		this._deletableLayers.removeLayer(layer);
 
 		this._deletedLayers.addLayer(layer);
+
+		layer.fire('deleted');
 	},
 
 	_onMouseMove: function (e) {

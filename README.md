@@ -1,3 +1,8 @@
+#Leaflet.draw With Touch
+This is a touch friendly version of Leaflet.draw that was created and maintained by Michael Guild (https://github.com/michaelguild13).
+
+The touch support was initiated due to a demand for it at National Geographic for their Map Maker Projected (http://mapmaker.education.nationalgeographic.com/) that was created by Michael Guild and Daniel Schep (https://github.com/dschep)
+
 # Important
 Leaflet.draw 0.2.3+ requires [Leaflet 0.7](https://github.com/Leaflet/Leaflet/archive/v0.7.zip) or higher.
 
@@ -12,7 +17,7 @@ Leaflet.draw 0.2.0 changes a LOT of things from 0.1. Please see [BREAKING CHANGE
 [Using the plugin](#using)  
 [Advanced Options](#options)  
 [Common tasks](#commontasks)  
-[Thanks](#thanks)  
+[Thanks](#thanks)
 
 <a name="using" />
 ## Using the plugin
@@ -265,7 +270,7 @@ E.g. The edit options below will maintain the layer color and set the edit opaci
 
 ````js
 {
-	selectedPathoptions: {
+	selectedPathOptions: {
 		maintainColor: true,
 		opacity: 0.3
 	}
