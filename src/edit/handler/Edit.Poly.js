@@ -157,16 +157,7 @@ L.Edit.Poly = L.Handler.extend({
 		this._poly.redraw();
 	},
 
-	_onMarkerClick: function (e) {
-
-		var minPoints = L.Polygon && (this._poly instanceof L.Polygon) ? 4 : 3,
-			marker = e.target;
-
-		// If removing this point would create an invalid polyline/polygon don't remove
-		if (this._poly._latlngs.length < minPoints) {
-			return;
-		}
-
+	_removePoint: function (marker) {
 		// remove the marker
 		this._removeMarker(marker);
 
@@ -184,15 +175,26 @@ L.Edit.Poly = L.Handler.extend({
 		// create a ghost marker in place of the removed one
 		if (marker._prev && marker._next) {
 			this._createMiddleMarker(marker._prev, marker._next);
-
 		} else if (!marker._prev) {
 			marker._next._middleLeft = null;
-
 		} else if (!marker._next) {
 			marker._prev._middleRight = null;
 		}
 
 		this._fireEdit();
+	},
+
+	_onMarkerClick: function (e) {
+
+		var minPoints = L.Polygon && (this._poly instanceof L.Polygon) ? 4 : 3,
+			marker = e.target;
+
+		// If removing this point would create an invalid polyline/polygon don't remove
+		if (this._poly._latlngs.length < minPoints) {
+			return;
+		}
+
+		this._removePoint(marker);
 	},
 
 	_onTouchMove: function (e) {
