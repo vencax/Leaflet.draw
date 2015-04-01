@@ -39,14 +39,26 @@ L.Edit.Poly = L.Handler.extend({
 
 			this._map = this._poly._map; // Set map
 			//Terrible hack to un-nest nested polygons. See https://github.com/Leaflet/Leaflet/issues/2618
-			if (!this._poly._flat(this._poly._latlngs)) {
-				this._poly._latlngs = this._poly._latlngs[0];
-			}
+			// if (!this._poly._flat(this._poly._latlngs)) {
+			// 	this._poly._latlngs = this._poly._latlngs[0];
+			// }
 
 			if (!this._markerGroup) {
 				this._initMarkers();
 			}
 			this._poly._map.addLayer(this._markerGroup);
+		}
+
+		var opts = this.options || {};
+		if (!('notBackCompatible' in opts) && !(this._poly._backCompatible)) {
+			this._poly.on('point:marker:click', function (e) {
+				this._removePoint(e.marker);
+				this._poly.fire('editstart');
+			}, this);
+			this._poly.on('middle:marker:dragstart', function () {
+				this._poly.fire('editstart');
+			}, this);
+			this._poly._backCompatible = true;
 		}
 	},
 
@@ -81,7 +93,7 @@ L.Edit.Poly = L.Handler.extend({
 		for (i = 0, len = latlngs.length; i < len; i++) {
 
 			marker = this._createMarker(latlngs[i], i);
-			marker.on('click', this._onMarkerClick, this);
+			this._initPointMarker(marker);
 			this._markers.push(marker);
 		}
 
@@ -112,13 +124,32 @@ L.Edit.Poly = L.Handler.extend({
 
 		marker
 			.on('drag', this._onMarkerDrag, this)
-			.on('dragend', this._fireEdit, this)
-			.on('touchmove', this._onTouchMove, this)
-			.on('touchend', this._fireEdit, this);
+			.on('touchmove', this._onTouchMove, this);
 
 		this._markerGroup.addLayer(marker);
 
 		return marker;
+	},
+
+	_initPointMarker: function (marker) {
+
+		function onDragEnd() {
+			this._poly.fire('point:marker:dragend', {marker: marker});
+		}
+
+		function onDragStart() {
+			this._poly.fire('point:marker:dragstart', {marker: marker});
+		}
+
+		function onMarkerClick() {
+			this._poly.fire('point:marker:click', {marker: marker});
+		}
+
+		marker
+			.on('dragstart', onDragStart, this)
+			.on('dragend', onDragEnd, this)
+			.on('touchend', onDragEnd, this)
+			.on('click', onMarkerClick, this);
 	},
 
 	_removeMarker: function (marker) {
@@ -131,15 +162,8 @@ L.Edit.Poly = L.Handler.extend({
 
 		marker
 			.off('drag', this._onMarkerDrag, this)
-			.off('dragend', this._fireEdit, this)
 			.off('touchmove', this._onMarkerDrag, this)
-			.off('touchend', this._fireEdit, this)
 			.off('click', this._onMarkerClick, this);
-	},
-
-	_fireEdit: function () {
-		this._poly.edited = true;
-		this._poly.fire('edit');
 	},
 
 	_onMarkerDrag: function (e) {
@@ -158,6 +182,14 @@ L.Edit.Poly = L.Handler.extend({
 	},
 
 	_removePoint: function (marker) {
+
+		var minPoints = L.Polygon && (this._poly instanceof L.Polygon) ? 4 : 3;
+
+		// If removing this point would create an invalid polyline/polygon don't remove
+		if (this._poly._latlngs.length < minPoints) {
+			return;
+		}
+
 		// remove the marker
 		this._removeMarker(marker);
 
@@ -180,21 +212,6 @@ L.Edit.Poly = L.Handler.extend({
 		} else if (!marker._next) {
 			marker._prev._middleRight = null;
 		}
-
-		this._fireEdit();
-	},
-
-	_onMarkerClick: function (e) {
-
-		var minPoints = L.Polygon && (this._poly instanceof L.Polygon) ? 4 : 3,
-			marker = e.target;
-
-		// If removing this point would create an invalid polyline/polygon don't remove
-		if (this._poly._latlngs.length < minPoints) {
-			return;
-		}
-
-		this._removePoint(marker);
 	},
 
 	_onTouchMove: function (e) {
@@ -240,9 +257,7 @@ L.Edit.Poly = L.Handler.extend({
 
 			marker._index = i;
 
-			marker
-				.off('click', onClick, this)
-				.on('click', this._onMarkerClick, this);
+			marker.off('click', onClick, this);
 
 			latlng.lat = marker.getLatLng().lat;
 			latlng.lng = marker.getLatLng().lng;
@@ -256,22 +271,24 @@ L.Edit.Poly = L.Handler.extend({
 			this._updatePrevNext(marker1, marker);
 			this._updatePrevNext(marker, marker2);
 
-			this._poly.fire('editstart');
+			this._poly.fire('middle:marker:dragstart', {marker: marker});
 		};
 
 		onDragEnd = function () {
+			marker.off('click', onClick, this);
 			marker.off('dragstart', onDragStart, this);
 			marker.off('dragend', onDragEnd, this);
 			marker.off('touchmove', onDragStart, this);
 
 			this._createMiddleMarker(marker1, marker);
 			this._createMiddleMarker(marker, marker2);
+			this._initPointMarker(marker);
+			this._poly.fire('middle:marker:dragend', {marker: marker});
 		};
 
 		onClick = function () {
 			onDragStart.call(this);
 			onDragEnd.call(this);
-			this._fireEdit();
 		};
 
 		marker
